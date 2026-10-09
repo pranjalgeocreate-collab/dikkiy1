@@ -1,0 +1,20 @@
+.venv/
+voices/
+*.wav
+.venv-indic/
+indic/
+*.log
+*.pid
+server/fillers/
+
+# private / child data: never commit
+server/children.db
+server/talklog.jsonl
+server/settings.json
+esp32/board/config.py
+# big or regenerated
+server/stories_audio/
+server/songs/
+esp32/firmware/*.bin
+__pycache__/
+.DS_Store

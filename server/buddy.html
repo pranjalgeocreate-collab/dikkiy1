@@ -1,0 +1,367 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Dikkey</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Baloo+2:wght@700;800&display=swap" rel="stylesheet">
+<style>
+  :root { --ink: #e8eef6; --muted: #b7c2d4; --teal: #3ecfb8; --listen: #3ec46d; }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; height: 100%; background: #000000; color: var(--ink);
+               font-family: 'Baloo 2', system-ui, sans-serif; overflow: hidden;
+               -webkit-user-select: none; user-select: none; -webkit-touch-callout: none; }
+  main { height: 100%; display: grid; grid-template-rows: auto minmax(0, 1fr) auto; }
+  header { text-align: center; padding: clamp(14px, 3vh, 34px) 16px 0; display: grid; gap: 4px; justify-items: center; }
+  h1 { margin: 0; font-size: clamp(44px, 7vw, 96px); line-height: .95; font-weight: 800; color: #1f9e89; letter-spacing: .01em; }
+  .tag { margin: 0; font-size: clamp(19px, 2.3vw, 30px); font-weight: 700; color: var(--ink); }
+  .chips { display: flex; flex-wrap: wrap; gap: 10px; justify-content: center; margin-top: 8px; }
+  .chip { font-size: clamp(14px, 1.4vw, 18px); font-weight: 700; color: var(--teal); background: #12221f; border-radius: 999px; padding: 6px 16px; }
+  /* The talk/power control lives ON Dikkey's body (his belly button, in 3D) — not a browser button. */
+  #stage { width: 100%; height: 100%; display: block; touch-action: none; }
+  #stage:focus-visible { outline: 3px solid var(--ink); outline-offset: -4px; }
+  .bar { display: flex; gap: 18px; align-items: center; justify-content: center; padding: 10px 16px 22px; }
+  .mini { width: 40px; height: 40px; border-radius: 50%; border: 2px solid #2c3648; cursor: pointer; background: #111111; color: var(--muted); display: grid; place-items: center; align-self: center; }
+  .mini:hover { border-color: var(--teal); color: var(--teal); }
+  .mini:focus-visible { outline: 3px solid var(--ink); outline-offset: 3px; }
+  .status { position: absolute; bottom: 4px; left: 0; right: 0; text-align: center; font-size: 19px; font-weight: 700; color: var(--muted); pointer-events: none; }
+</style>
+</head>
+<body>
+<main>
+  <header>
+    <h1>Dikkey</h1>
+    <p class="tag">Your child's chat buddy — without a screen</p>
+    <div class="chips"><span class="chip">Works offline and online</span><span class="chip">Learning tools</span><span class="chip">An intelligent buddy</span></div>
+  </header>
+  <div style="position: relative; min-height: 0">
+    <canvas id="stage" tabindex="0" role="button" aria-pressed="false"
+            aria-label="Dikkey. Tap his belly to wake him up — his mic starts listening right away, so just talk. Tap again when you're done talking, to send it."></canvas>
+    <div class="status" id="status" aria-live="polite">Dikkey is asleep</div>
+  </div>
+  <div class="bar">
+    <button class="mini" id="stop" type="button" aria-label="Stop Dikkey — ends listening or talking right away" title="Stop">
+      <svg width="22" height="22" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><rect x="5" y="5" width="14" height="14" rx="2"/></svg>
+    </button>
+    <button class="mini" id="snap" type="button" aria-label="Save a 4K picture of Dikkey" title="Save a 4K picture (3840 × 2160)">
+      <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 8h3l2-3h6l2 3h3v11H4z"/><circle cx="12" cy="13" r="3.5"/></svg>
+    </button>
+  </div>
+</main>
+<script type="module">
+import * as THREE from "/static/three.module.min.js";
+
+// ---------------------------------------------------------------- scene
+const canvas = document.getElementById("stage");
+const renderer = new THREE.WebGLRenderer({ canvas, antialias: true, alpha: true, preserveDrawingBuffer: true });
+renderer.setPixelRatio(Math.min(devicePixelRatio, 3));   // sharp on 4K / Retina screens
+renderer.toneMapping = THREE.ACESFilmicToneMapping;
+renderer.toneMappingExposure = 1.05;
+renderer.shadowMap.enabled = true;
+renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+const scene = new THREE.Scene();
+const camera = new THREE.PerspectiveCamera(32, 1, 0.1, 100);
+camera.position.set(0, 1.35, 7.0);
+camera.lookAt(0, 1.2, 0);
+
+scene.add(new THREE.HemisphereLight(0xffffff, 0x9cc9bd, 1.1));
+const key = new THREE.DirectionalLight(0xffffff, 2.2);
+key.position.set(3, 6, 5); key.castShadow = true;
+key.shadow.mapSize.set(4096, 4096); key.shadow.radius = 6; key.shadow.bias = -0.0004;
+Object.assign(key.shadow.camera, { left: -4, right: 4, top: 4, bottom: -2 });
+scene.add(key);
+const rim = new THREE.DirectionalLight(0xbfe8ff, 1.3); rim.position.set(-4, 3, -4); scene.add(rim);
+
+const ground = new THREE.Mesh(new THREE.PlaneGeometry(20, 20), new THREE.ShadowMaterial({ opacity: 0.18 }));
+ground.rotation.x = -Math.PI / 2; ground.receiveShadow = true; scene.add(ground);
+
+// plush (felt) materials: sheen gives the soft fabric look
+const plush = (c, sheen = 0xffffff) => new THREE.MeshPhysicalMaterial({ color: c, roughness: 0.95, sheen: 1, sheenRoughness: 0.75, sheenColor: new THREE.Color(sheen) });
+const M = {
+  body: plush(0x1f9e89, 0x9ff0dc), face: plush(0xe4f6f1), inner: plush(0xffd9cb), cheek: plush(0xf6a294),
+  belly: plush(0xffcf4a, 0xfff3c4), feet: plush(0x16756a, 0x7fd8c4),
+  eye: new THREE.MeshPhysicalMaterial({ color: 0x1f2a44, roughness: 0.15, clearcoat: 1, clearcoatRoughness: 0.08 }),
+  shine: new THREE.MeshBasicMaterial({ color: 0xffffff }),
+  mouth: new THREE.MeshStandardMaterial({ color: 0x1f2a44, roughness: 0.6 }),
+  heart: new THREE.MeshStandardMaterial({ color: 0x4a7cf0, emissive: 0x4a7cf0, emissiveIntensity: 1.6, roughness: 0.4 }),
+};
+const mesh = (g, m, parent, pos = [0, 0, 0], scale = [1, 1, 1]) => {
+  const o = new THREE.Mesh(g, m); o.position.set(...pos); o.scale.set(...scale); o.castShadow = true; parent.add(o); return o;
+};
+const S = (r, w = 128, h = 96) => new THREE.SphereGeometry(r, w, h);   // smooth at 4K
+
+const dikkey = new THREE.Group(); scene.add(dikkey);           // whole toy: bounce / lean
+// Starts off the left edge and flies in to the middle on load.
+dikkey.position.x = -14;
+const body = new THREE.Group(); dikkey.add(body);              // breathing
+mesh(S(1), M.body, body, [0, 1.25, 0], [1.05, 1.2, 0.92]);     // round body
+const head = new THREE.Group(); head.position.set(0, 1.25, 0); body.add(head);   // tilts / looks at you
+const ears = [];
+for (const sx of [-1, 1]) {
+  const ear = new THREE.Group(); ear.position.set(0.62 * sx, 1.02, 0.05); head.add(ear);
+  mesh(S(0.32), M.body, ear, [0, 0, 0], [1, 1, 0.75]);
+  mesh(S(0.18), M.inner, ear, [0, 0, 0.17], [1, 1, 0.5]);
+  ears.push(ear);
+}
+mesh(S(0.62), M.face, head, [0, 0.45, 0.66], [1.08, 0.72, 0.38]);  // face plate
+const eyes = [];
+for (const sx of [-1, 1]) {
+  const eye = new THREE.Group(); eye.position.set(0.27 * sx, 0.55, 0.86); head.add(eye);
+  mesh(S(0.105), M.eye, eye, [0, 0, 0], [1, 1.3, 0.6]);
+  mesh(S(0.034, 16, 12), M.shine, eye, [0.035, 0.06, 0.06]);
+  eyes.push(eye);
+  mesh(S(0.1), M.cheek, head, [0.45 * sx, 0.33, 0.8], [1.1, 0.6, 0.3]);
+}
+const mouth = mesh(new THREE.CapsuleGeometry(0.06, 0.2, 16, 48), M.mouth, head, [0, 0.26, 0.89], [1, 1, 0.5]);
+mouth.rotation.z = Math.PI / 2;
+const heart = mesh(S(0.13), M.heart, body, [0, 1.05, 0.9], [1, 1, 0.45]);
+const heartLight = new THREE.PointLight(0x4a7cf0, 2.5, 3.2); heartLight.position.set(0, 1.05, 1.25); body.add(heartLight);
+const bellyBtn = mesh(new THREE.CylinderGeometry(0.24, 0.26, 0.12, 128), M.belly, body, [0, 0.62, 0.86]);
+bellyBtn.rotation.x = Math.PI / 2 - 0.35;
+mesh(new THREE.TorusGeometry(0.25, 0.035, 32, 128), M.mouth, body, [0, 0.62, 0.89]).rotation.x = -0.35;
+// his actual talk/power control: a bigger invisible target over the belly, easy to tap on touch screens
+const bellyHit = mesh(new THREE.CylinderGeometry(0.42, 0.42, 0.5, 24),
+  new THREE.MeshBasicMaterial({ transparent: true, opacity: 0, depthWrite: false }), body, [0, 0.62, 0.86]);
+bellyHit.rotation.x = Math.PI / 2 - 0.35; bellyHit.castShadow = false;
+const arms = [];
+for (const sx of [-1, 1]) {
+  const arm = new THREE.Group(); arm.position.set(0.98 * sx, 1.15, 0.1); body.add(arm);
+  const a = mesh(new THREE.CapsuleGeometry(0.17, 0.45, 24, 64), M.body, arm, [0.05 * sx, -0.3, 0]);
+  a.rotation.z = 0.35 * sx;
+  arms.push(arm);
+}
+for (const sx of [-1, 1]) mesh(S(0.32), M.feet, dikkey, [0.42 * sx, 0.13, 0.25], [1, 0.45, 1.3]);
+// thinking dots that circle his head
+const dots = new THREE.Group(); dots.position.set(0, 2.85, 0); dikkey.add(dots);
+for (let i = 0; i < 3; i++) mesh(S(0.08, 16, 12), new THREE.MeshStandardMaterial({ color: 0xf0a020, emissive: 0xf0a020, emissiveIntensity: 0.8 }), dots, [Math.cos(i * 2.09) * 0.55, 0, Math.sin(i * 2.09) * 0.55]);
+dots.visible = false;
+
+// ---------------------------------------------------------------- what Dikkey is doing (from the toy's LED)
+const COLORS = { idle: 0x4a7cf0, listen: 0x3ec46d, think: 0xf0a020, talk: 0xa45cf0, error: 0xe04848, off: 0x222833 };
+const LED = { "0,40,0": "listen", "40,18,0": "think", "24,0,40": "talk", "0,0,6": "idle", "40,0,0": "error" };
+const WORDS = { off: "Tap Dikkey's belly to wake him up", idle: "Tap his belly and start talking — no need to hold it",
+                listen: "Listening… tap again when you're done", think: "Thinking…", talk: "Dikkey is talking",
+                error: "Can't reach Dikkey's brain" };
+let mode = "off";
+const heartColor = new THREE.Color(COLORS.off);
+
+// head follows the pointer a little; the cursor shows a hand over his belly button
+const look = { x: 0, y: 0 };
+const raycaster = new THREE.Raycaster();
+const ndc = new THREE.Vector2();
+function overBelly(clientX, clientY) {
+  const r = canvas.getBoundingClientRect();
+  ndc.x = ((clientX - r.left) / r.width) * 2 - 1;
+  ndc.y = -(((clientY - r.top) / r.height) * 2 - 1);
+  raycaster.setFromCamera(ndc, camera);
+  return raycaster.intersectObject(bellyHit, false).length > 0;
+}
+canvas.addEventListener("pointermove", (e) => {
+  const r = canvas.getBoundingClientRect();
+  look.x = ((e.clientX - r.left) / r.width - 0.5) * 2; look.y = ((e.clientY - r.top) / r.height - 0.5) * 2;
+  canvas.style.cursor = overBelly(e.clientX, e.clientY) ? "pointer" : "default";
+});
+canvas.addEventListener("pointerleave", () => { look.x = 0; look.y = 0; });
+
+const reduce = matchMedia("(prefers-reduced-motion: reduce)").matches;
+const lerp = (a, b, t) => a + (b - a) * t;
+let blinkAt = 2, t0 = performance.now();
+const FLY_FROM = -14, FLY_SECS = reduce ? 0 : 1.7;
+let flyU = reduce ? 1 : 0;
+let greeting = false;
+function frame(now) {
+  const t = (now - t0) / 1000, k = 0.08;
+  const m = greeting ? "talk" : mode, on = greeting || m !== "off";
+  const motion = reduce ? 0.25 : 1;
+  // breathing and sway
+  const breathe = on ? Math.sin(t * 2.1) * 0.015 : Math.sin(t * 0.9) * 0.01;
+  body.scale.set(1 + breathe, 1 - breathe, 1 + breathe);
+  // bounce while talking, lean while listening
+  const bounce = m === "talk" ? Math.abs(Math.sin(t * 7)) * 0.08 * motion : 0;
+  if (flyU < 1) {
+    flyU = Math.min(1, t / FLY_SECS);
+    const e = 1 - Math.pow(1 - flyU, 3);
+    dikkey.position.x = FLY_FROM * (1 - e);
+    dikkey.position.y = Math.sin(flyU * Math.PI) * 1.6;
+    dikkey.rotation.z = (1 - e) * -0.35;
+    if (flyU >= 1) { dikkey.position.x = 0; dikkey.rotation.z = 0; hello(); }
+  } else {
+    dikkey.position.y = lerp(dikkey.position.y, bounce, 0.3);
+    dikkey.rotation.z = lerp(dikkey.rotation.z, 0, k);
+  }
+  dikkey.rotation.x = lerp(dikkey.rotation.x, m === "listen" ? 0.12 : m === "off" ? 0.05 : 0, k);
+  dikkey.rotation.y = lerp(dikkey.rotation.y, (on ? Math.sin(t * 0.6) * 0.12 : 0) * motion, k);
+  // head: tilt while thinking, follow pointer when awake, droop when asleep
+  const tilt = m === "think" ? Math.sin(t * 1.8) * 0.18 * motion : 0;
+  head.rotation.z = lerp(head.rotation.z, tilt, k);
+  head.rotation.y = lerp(head.rotation.y, on ? look.x * 0.35 : 0, k);
+  head.rotation.x = lerp(head.rotation.x, on ? look.y * 0.18 - (m === "think" ? 0.12 : 0) : 0.12, k);
+  // ears perk up while listening
+  for (const [i, ear] of ears.entries()) ear.rotation.z = lerp(ear.rotation.z, (m === "listen" ? -0.35 : 0) * (i ? 1 : -1), k);
+  // eyes: blink, wide when listening, closed when asleep, look up when thinking
+  if (t > blinkAt) blinkAt = t + 2.5 + Math.random() * 3;
+  const blinking = on && blinkAt - t > 2.35 && blinkAt - t < 2.5 ? 0.12 : 1;
+  for (const eye of eyes) {
+    eye.scale.y = lerp(eye.scale.y, !on ? 0.1 : (m === "listen" ? 1.25 : 1) * blinking, 0.35);
+    eye.position.y = lerp(eye.position.y, m === "think" ? 0.6 : 0.55, k);
+  }
+  // mouth talks
+  const open = m === "talk" ? 0.6 + Math.abs(Math.sin(t * 13) * Math.sin(t * 4.3)) * 2.4 : m === "listen" ? 1.3 : 1;
+  mouth.scale.x = lerp(mouth.scale.x, open, 0.4);
+  // arms wave while talking, up while listening
+  for (const [i, arm] of arms.entries()) {
+    const s = i ? 1 : -1;
+    const target = m === "talk" ? (0.25 + Math.sin(t * 5 + i * Math.PI) * 0.35) * s * motion : m === "listen" ? 0.5 * s : 0;
+    arm.rotation.z = lerp(arm.rotation.z, target, 0.1);
+  }
+  // heart colour + pulse
+  heartColor.lerp(new THREE.Color(COLORS[m] ?? COLORS.idle), 0.12);
+  M.heart.color.copy(heartColor); M.heart.emissive.copy(heartColor); heartLight.color.copy(heartColor);
+  const pulse = !on ? 0 : m === "talk" ? 1.6 + Math.sin(t * 9) * 0.8 : m === "listen" ? 1.8 + Math.sin(t * 6) * 0.6 : m === "think" ? 1.3 + Math.sin(t * 3) * 0.5 : 1.2;
+  M.heart.emissiveIntensity = pulse; heartLight.intensity = pulse * 1.8;
+  heart.scale.setScalar(1 + (on ? Math.sin(t * (m === "talk" ? 9 : 4)) * 0.06 : 0));
+  heart.scale.z = 0.45;
+  // thinking dots
+  dots.visible = m === "think"; dots.rotation.y = t * 2.2;
+  // belly button pressed while listening
+  bellyBtn.position.z = lerp(bellyBtn.position.z, m === "listen" ? 0.8 : 0.86, 0.3);
+  M.belly.color.lerp(new THREE.Color(m === "listen" ? 0x3ec46d : 0xffcf4a), 0.15);
+  renderer.render(scene, camera);
+  requestAnimationFrame(frame);
+}
+function resize() {
+  const w = canvas.clientWidth, h = canvas.clientHeight;
+  renderer.setSize(w, h, false); camera.aspect = w / h;
+  camera.position.z = w / h < 0.8 ? 9.6 : 7.0;           // phones: step back so he fits
+  camera.updateProjectionMatrix();
+}
+new ResizeObserver(resize).observe(canvas); resize();
+requestAnimationFrame(frame);
+
+// On load he flies in, asks for the mic, then this page plays the wav from the server's own speak().
+const HELLO = "Hi, I am chat buddy Dikkey, your child buddy. I can teach him maths, language, and sing a poem, along with lots of stories, offline, and with no screen.";
+let saidHello = false, spoke = false, saying = false;
+async function sayHello() {
+  if (spoke || saying) return;
+  saying = true;
+  holdStatus = true;
+  $("status").textContent = "Dikkey is getting ready to talk";
+  try {
+    const r = await fetch("/say?lang=en&text=" + encodeURIComponent(HELLO));
+    if (!r.ok) throw new Error("say " + r.status);
+    const url = URL.createObjectURL(await r.blob());
+    const audio = new Audio(url);
+    audio.onended = () => {
+      greeting = false; holdStatus = false; URL.revokeObjectURL(url);
+      $("status").textContent = WORDS[mode] || "";
+    };
+    greeting = true;
+    $("status").textContent = "Dikkey is saying hello";
+    await audio.play();
+    spoke = true;
+  } catch {
+    saying = false; greeting = false; holdStatus = false; spoke = false;
+    $("status").textContent = "Tap Dikkey to hear him";
+  }
+}
+async function hello() {
+  if (saidHello) return;
+  saidHello = true;
+  holdStatus = true;
+  $("status").textContent = "Allow the microphone so Dikkey can hear you";
+  try {
+    const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+    stream.getTracks().forEach((track) => track.stop());
+  } catch {
+    $("status").textContent = "Microphone is off. Tap Dikkey if you want to allow it later.";
+  }
+  sayHello();
+}
+if (reduce) hello();
+
+// ---------------------------------------------------------------- talk to the toy (the virtual board on this Mac)
+const $ = (id) => document.getElementById(id);
+let busy = false;
+let holdStatus = false;
+function setMode(m) {
+  if (m === mode && !holdStatus) return;
+  const changed = m !== mode;
+  mode = m;
+  if (!holdStatus) $("status").textContent = WORDS[m] || "";
+  if (changed) canvas.setAttribute("aria-pressed", m !== "off");
+}
+async function poll() {
+  if (busy) return;
+  try {
+    const st = await (await fetch("/api/board/virtual/state")).json();
+    setMode(st.running ? (LED[(st.led || []).join(",")] || "idle") : "off");
+  } catch { setMode("off"); }
+}
+setInterval(poll, 300); poll();
+// 📷 a 3840 x 2160 picture: Dikkey as he is right now, on white, with his name and taglines
+// ⏹ Stop: always available, even while he's talking (a normal belly tap is ignored while he's busy,
+// on purpose, so he can't be interrupted by accident). Press-then-release matches the real toy's own
+// "press the belly again to stop talking" behaviour built into dikkey.py.
+$("stop").onclick = async () => {
+  if (mode === "off" || mode === "idle") return;   // nothing happening, nothing to stop
+  await press(true);
+  await new Promise(r => setTimeout(r, 150));
+  await press(false);
+};
+$("snap").onclick = () => {
+  const W = 3840, H = 2160, w = canvas.clientWidth, h = canvas.clientHeight, pr = renderer.getPixelRatio();
+  renderer.setPixelRatio(1); renderer.setSize(W, 1640, false);
+  camera.aspect = W / 1640; camera.position.z = 7.0; camera.updateProjectionMatrix();
+  renderer.render(scene, camera);
+  const out = document.createElement("canvas"); out.width = W; out.height = H;
+  const g = out.getContext("2d");
+  g.fillStyle = "#000000"; g.fillRect(0, 0, W, H);
+  g.drawImage(canvas, 0, 520, W, 1640);
+  g.textAlign = "center";
+  g.fillStyle = "#1f9e89"; g.font = "800 230px 'Baloo 2', sans-serif"; g.fillText("Dikkey", W / 2, 260);
+  g.fillStyle = "#e8eef6"; g.font = "700 92px 'Baloo 2', sans-serif"; g.fillText("Your child's chat buddy — without a screen", W / 2, 390);
+  g.fillStyle = "#16756a"; g.font = "700 64px 'Baloo 2', sans-serif";
+  g.fillText("Works offline and online  ·  Learning tools  ·  An intelligent buddy", W / 2, 490);
+  out.toBlob((blob) => {
+    const a = document.createElement("a");
+    a.href = URL.createObjectURL(blob); a.download = "dikkey-4k.png"; a.click();
+    setTimeout(() => URL.revokeObjectURL(a.href), 5000);
+  }, "image/png");
+  renderer.setPixelRatio(pr); renderer.setSize(w, h, false); resize();
+};
+// No holding anything: a TAP wakes Dikkey AND starts his mic listening right away — the child just talks.
+// Tap again when they're done (sends it). Busy (thinking/talking) taps are ignored.
+async function press(v) {
+  try { await fetch("/api/board/virtual/" + (v ? "press" : "release"), { method: "POST" }); } catch {}
+}
+async function doTap() {
+  if (saidHello && !spoke) sayHello();
+  if (busy) return;
+  if (mode === "off") {
+    busy = true;
+    $("status").textContent = "Waking up…";
+    try {
+      const r = await (await fetch("/api/board/virtual/power", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ on: true }) })).json();
+      if (r.on) { setMode("idle"); await press(true); }   // awake -> start listening immediately, no hold needed
+      else setMode("off");
+    } catch { $("status").textContent = "Can't reach Dikkey's server"; }
+    busy = false;
+    return;
+  }
+  if (mode === "listen") { await press(false); return; }  // tap again: done talking, send it
+  if (mode === "idle") { await press(true); return; }     // awake and quiet: tap starts listening
+  // mode is "think" or "talk": Dikkey's busy, ignore the tap
+}
+canvas.addEventListener("pointerdown", (e) => {
+  if (!overBelly(e.clientX, e.clientY)) return;
+  e.preventDefault();          // stop the browser's drag/text-selection taking over the page
+  canvas.focus();
+  doTap();
+});
+let spaceHeld = false;
+canvas.addEventListener("keydown", (e) => { if (e.code === "Space" && !spaceHeld) { spaceHeld = true; e.preventDefault(); doTap(); } });
+canvas.addEventListener("keyup", (e) => { if (e.code === "Space") { spaceHeld = false; e.preventDefault(); } });
+</script>
+</body>
+</html>

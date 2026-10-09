@@ -1,0 +1,16 @@
+{
+ "voice_en": "en_US-lessac-medium",
+ "voice_hi": "hi_IN-priyamvada-medium",
+ "speed": 1.4,
+ "llm": "eleven",
+ "child_pitch": 1.3,
+ "eleven_agent_id": "",
+ "voice_as": "child-indic-as",
+ "voice_mr": "eleven-mr-cgSgspJ2msm6clMCkdW9",
+ "child_name": "",
+ "child_age": 6,
+ "bedtime_on": true,
+ "bedtime_start": "21:00",
+ "bedtime_end": "07:00",
+ "safety_on": true
+}

@@ -1,0 +1,242 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Dikkey TV</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Baloo+2:wght@800&family=VT323&display=swap" rel="stylesheet">
+<style>
+  /* Dikkey's retro TV: the virtual board (or later the real toy's state) shown as an old CRT.
+     Own design: VHS blue, scanlines, grain, rolling bar, RGB split, hopping pom-pom crew in Dikkey's heart colours. */
+  :root {
+    --room: #07080c; --bezel: #1a1c22; --bezel-hi: #2a2d36;
+    --vhs: #1d4fd8; --vhs-deep: #0d2a8a; --osd: #f4f7ff; --osd-dim: #b9c6f5;
+    --ready: #4a7cf0; --listen: #3ec46d; --think: #f0a020; --talk: #b072f0; --rec: #ff4b4b;
+    --body: #1f9e89; --face: #dff3ee; --ink: #1f2a44; --belly: #ffcf4a;
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; min-height: 100vh; background: radial-gradient(ellipse at 50% 40%, #11131b 0%, var(--room) 70%); color: var(--osd);
+         font-family: 'VT323', ui-monospace, monospace; display: grid; place-items: center; padding: 16px; overflow-x: hidden; }
+  .tv { width: min(1080px, 100%); display: grid; gap: 14px; justify-items: center; }
+  .bezel { width: 100%; aspect-ratio: 4 / 3; max-height: 82vh; background: linear-gradient(160deg, var(--bezel-hi), var(--bezel) 40%);
+           border-radius: 44px; padding: clamp(14px, 2.6vw, 30px); box-shadow: 0 40px 80px rgba(0,0,0,.6), inset 0 2px 0 rgba(255,255,255,.06); }
+  .screen { position: relative; width: 100%; height: 100%; border-radius: 26px; overflow: hidden; background: #000; container-type: size; }
+  .crt { position: absolute; inset: 0; background: radial-gradient(ellipse at 50% 45%, #2f66ff 0%, var(--vhs) 45%, var(--vhs-deep) 100%);
+         transform-origin: 50% 50%; opacity: 0; }
+  .screen.on .crt { animation: powerOn 1.1s cubic-bezier(.25,.8,.3,1) forwards; }
+  .screen.off .crt { animation: powerOff .55s cubic-bezier(.6,0,.9,.4) forwards; }
+  @keyframes powerOn { 0% { opacity: 1; transform: scale(.02,.004); filter: brightness(12); }
+                       30% { opacity: 1; transform: scale(1,.006); filter: brightness(9); }
+                       65% { transform: scale(1,1); filter: brightness(2.2); }
+                       100% { opacity: 1; transform: scale(1,1); filter: brightness(1); } }
+  @keyframes powerOff { 0% { opacity: 1; transform: scale(1,1); filter: brightness(1); }
+                        45% { opacity: 1; transform: scale(1,.006); filter: brightness(6); }
+                        80% { opacity: 1; transform: scale(.03,.006); filter: brightness(10); }
+                        100% { opacity: 0; transform: scale(0,0); } }
+  /* scanlines, grain, rolling bar, vignette */
+  .scan { position: absolute; inset: 0; background: repeating-linear-gradient(to bottom, rgba(0,0,0,.18) 0 2px, transparent 2px 4px); pointer-events: none; mix-blend-mode: multiply; }
+  .noise { position: absolute; inset: -20%; opacity: .16; pointer-events: none;
+           background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='160' height='160'><filter id='n'><feTurbulence type='fractalNoise' baseFrequency='.9' numOctaves='2' stitchTiles='stitch'/></filter><rect width='100%' height='100%' filter='url(%23n)'/></svg>");
+           animation: grain .5s steps(5) infinite; }
+  @keyframes grain { 0% { transform: translate(0,0); } 20% { transform: translate(-4%,3%); } 40% { transform: translate(3%,-5%); }
+                     60% { transform: translate(-2%,6%); } 80% { transform: translate(5%,2%); } 100% { transform: translate(0,0); } }
+  .roll { position: absolute; left: 0; right: 0; top: -25%; height: 22%; pointer-events: none;
+          background: linear-gradient(to bottom, transparent, rgba(255,255,255,.07) 45%, rgba(255,255,255,.12) 50%, transparent);
+          animation: roll 7s linear infinite; }
+  @keyframes roll { to { transform: translateY(560%); } }
+  .vignette { position: absolute; inset: 0; pointer-events: none; box-shadow: inset 0 0 12cqmin rgba(0,0,0,.55); border-radius: 26px; }
+  /* on-screen display */
+  .osd { position: absolute; font-size: clamp(16px, 4.2cqh, 34px); letter-spacing: .06em; color: var(--osd);
+         text-shadow: 1.5px 0 rgba(255,60,90,.65), -1.5px 0 rgba(60,220,255,.65), 0 0 10px rgba(255,255,255,.35); }
+  .tl { left: 7%; top: 7%; } .tr { right: 7%; top: 7%; } .bl { left: 7%; bottom: 6%; } .br { right: 7%; bottom: 6%; }
+  .rec-dot { display: inline-block; width: .55em; height: .55em; border-radius: 50%; background: var(--rec); margin-right: .3em; vertical-align: .05em; }
+  .blink { animation: blink 1s steps(1) infinite; }
+  @keyframes blink { 50% { opacity: 0; } }
+  .chflash { animation: chflash 1.2s steps(1) 1; }
+  @keyframes chflash { 0%, 60% { color: #7dff9a; } 100% { color: var(--osd); } }
+  /* Dikkey on the TV */
+  .stage { position: absolute; left: 50%; top: 9%; transform: translateX(-50%); width: 45cqh; height: 45cqh; }
+  .dk { position: absolute; inset: 0; filter: drop-shadow(0 0 2.2cqh rgba(255,255,255,.18)); }
+  .dk .ear { position: absolute; top: 4%; width: 24%; height: 24%; border-radius: 50%; background: var(--body); }
+  .dk .ear.l { left: 14%; } .dk .ear.r { right: 14%; }
+  .dk .ear::after { content: ""; position: absolute; inset: 28%; border-radius: 50%; background: #ffe2d6; }
+  .dk .head { position: absolute; left: 17%; top: 12%; width: 66%; height: 78%; background: var(--body);
+              border-radius: 50% 50% 44% 44% / 46% 46% 54% 54%; }
+  .dk .face { position: absolute; left: 27%; top: 22%; width: 46%; height: 30%; border-radius: 50%; background: var(--face); }
+  .dk .eye { position: absolute; top: 31%; width: 8%; height: 11%; border-radius: 50%; background: var(--ink); animation: eyes 4.5s infinite; transform-origin: 50% 60%; }
+  .dk .eye.l { left: 37%; } .dk .eye.r { right: 37%; }
+  .dk .eye::after { content: ""; position: absolute; left: 22%; top: 16%; width: 34%; height: 30%; border-radius: 50%; background: #fff; }
+  @keyframes eyes { 0%, 92%, 100% { transform: scaleY(1); } 95% { transform: scaleY(.08); } }
+  .dk .cheek { position: absolute; top: 43%; width: 9%; height: 5%; border-radius: 50%; background: #f8a99a; }
+  .dk .cheek.l { left: 30%; } .dk .cheek.r { right: 30%; }
+  .dk .mouth { position: absolute; left: 41%; top: 46%; width: 18%; height: 5%; border-radius: 3cqh; background: var(--ink);
+               background-image: radial-gradient(circle, #6f7d99 .35cqh, transparent .45cqh); background-size: 1.6cqh 1.6cqh; transition: height .08s; }
+  .dk .heart { position: absolute; left: 44%; top: 60%; width: 12%; height: 12%; border-radius: 50%; background: var(--ready); box-shadow: 0 0 3cqh 1cqh var(--ready); transition: background .25s, box-shadow .25s; }
+  .dk .belly { position: absolute; left: 39%; top: 75%; width: 22%; height: 22%; border-radius: 50%; background: var(--belly); border: .8cqh solid var(--ink); }
+  .screen[data-mode="listen"] .dk .heart { background: var(--listen); box-shadow: 0 0 4cqh 1.5cqh var(--listen); }
+  .screen[data-mode="think"] .dk .heart { background: var(--think); box-shadow: 0 0 4cqh 1.5cqh var(--think); }
+  .screen[data-mode="talk"] .dk .heart { background: var(--talk); box-shadow: 0 0 4cqh 1.5cqh var(--talk); }
+  .screen[data-mode="listen"] .dk .eye { height: 13%; top: 30%; }
+  .screen[data-mode="think"] .dk .eye { top: 28%; }
+  .screen[data-mode="talk"] .dk .mouth { animation: talk .18s ease-in-out infinite alternate; }
+  @keyframes talk { from { height: 4%; } to { height: 11%; border-radius: 0 0 3cqh 3cqh; } }
+  .screen[data-mode="listen"] .dk .belly { transform: scale(.9); background: var(--listen); }
+  .screen[data-mode="think"] .stage { animation: wobble 1.4s ease-in-out infinite; }
+  @keyframes wobble { 0%, 100% { transform: translateX(-50%) rotate(0); } 25% { transform: translateX(-50%) rotate(-3deg); } 75% { transform: translateX(-50%) rotate(3deg); } }
+  /* pom-pom crew = the heart colours */
+  .crew { position: absolute; left: 50%; top: 56%; transform: translateX(-50%); display: flex; }
+  .crew i { width: 5.4cqh; height: 5.4cqh; border-radius: 50%; margin-left: -1.2cqh; animation: hop 1.1s ease-in-out infinite;
+            background: radial-gradient(circle at 35% 30%, rgba(255,255,255,.55), transparent 45%), var(--c);
+            box-shadow: inset 0 -.6cqh 1cqh rgba(0,0,0,.25); filter: url(#fuzz); }
+  .crew i:nth-child(1) { --c: var(--ready); animation-delay: 0s; } .crew i:nth-child(2) { --c: var(--listen); animation-delay: .12s; }
+  .crew i:nth-child(3) { --c: var(--think); animation-delay: .24s; } .crew i:nth-child(4) { --c: var(--talk); animation-delay: .36s; }
+  @keyframes hop { 0%, 100% { transform: translateY(0) rotate(0); } 30% { transform: translateY(-3.5cqh) rotate(-6deg); } 60% { transform: translateY(0) rotate(4deg); } }
+  .screen[data-mode="talk"] .crew i { animation-duration: .5s; }
+  .screen[data-mode="listen"] .crew i:nth-child(2), .screen[data-mode="think"] .crew i:nth-child(3),
+  .screen[data-mode="talk"] .crew i:nth-child(4) { transform: scale(1.35); box-shadow: 0 0 2.5cqh .6cqh var(--c); z-index: 2; }
+  .title { position: absolute; left: 50%; top: 62%; transform: translateX(-50%); font-family: 'Baloo 2', sans-serif; font-weight: 800; font-style: italic;
+           font-size: 10cqh; line-height: 1; color: #fff; letter-spacing: .02em;
+           text-shadow: 2px 0 rgba(255,50,90,.75), -2px 0 rgba(40,220,255,.75), 0 0 2cqh rgba(255,255,255,.45); filter: url(#fuzz); }
+  .cc { position: absolute; left: 50%; bottom: 13%; transform: translateX(-50%); width: 82%; text-align: center; font-size: clamp(14px, 3.6cqh, 28px);
+        line-height: 1.25; color: #fff; text-shadow: 0 0 6px #000, 0 0 2px #000; min-height: 2.5em; }
+  .cc span { background: rgba(0,0,0,.55); padding: 0 .35em; box-decoration-break: clone; -webkit-box-decoration-break: clone; }
+  .content { position: absolute; inset: 0; opacity: 0; transition: opacity .3s .55s; }
+  .screen.on .content { opacity: 1; }
+  .screen.off .content { opacity: 0; transition: opacity .1s; }
+  .standby { position: absolute; inset: 0; display: grid; place-items: center; font-size: clamp(16px, 4cqh, 30px); color: #3a3f4f; letter-spacing: .1em; }
+  .screen.on .standby { display: none; }
+  /* controls under the TV */
+  .controls { display: flex; flex-wrap: wrap; gap: 14px; align-items: center; justify-content: center; width: 100%; }
+  .btn { font: 800 italic 22px 'Baloo 2', sans-serif; letter-spacing: .03em; padding: 14px 28px; border: 0; border-radius: 12px; cursor: pointer; color: #0b1f6b;
+         background: #f4f7ff; box-shadow: 3px 0 0 rgba(255,60,90,.7), -3px 0 0 rgba(60,220,255,.7); touch-action: none; user-select: none; min-height: 52px; }
+  .btn.talk { min-width: 240px; } .btn.talk.held { background: var(--listen); color: #fff; }
+  .btn:disabled { opacity: .45; cursor: default; }
+  .btn:focus-visible { outline: 3px solid #fff; outline-offset: 3px; }
+  .power { width: 58px; height: 58px; border-radius: 50%; border: 0; cursor: pointer; background: #2a2d36; color: #9aa3b8; display: grid; place-items: center;
+           box-shadow: inset 0 2px 0 rgba(255,255,255,.08), 0 4px 10px rgba(0,0,0,.5); }
+  .power.on { color: #7dff9a; box-shadow: 0 0 14px rgba(125,255,154,.45), inset 0 2px 0 rgba(255,255,255,.08); }
+  .power:focus-visible { outline: 3px solid #fff; outline-offset: 3px; }
+  .hint { font-size: 20px; color: #8e98b3; text-align: center; }
+  @media (prefers-reduced-motion: reduce) { .noise, .roll, .blink, .crew i, .dk .eye, .stage, .screen[data-mode="talk"] .dk .mouth { animation: none !important; } }
+</style>
+</head>
+<body>
+<svg width="0" height="0" style="position:absolute" aria-hidden="true"><filter id="fuzz"><feTurbulence type="fractalNoise" baseFrequency="1.6" numOctaves="1" result="t"/><feDisplacementMap in="SourceGraphic" in2="t" scale="3"/></filter></svg>
+<main class="tv">
+  <div class="bezel">
+    <div class="screen off" id="screen" data-mode="idle" aria-live="polite">
+      <div class="standby">STANDBY</div>
+      <div class="crt"></div>
+      <div class="content">
+        <div class="osd tl" id="osdState">▶ PLAY</div>
+        <div class="osd tr" id="osdCh">CH 01</div>
+        <div class="stage"><div class="dk" aria-hidden="true">
+          <div class="ear l"></div><div class="ear r"></div><div class="head"></div><div class="face"></div>
+          <div class="eye l"></div><div class="eye r"></div><div class="cheek l"></div><div class="cheek r"></div>
+          <div class="mouth"></div><div class="heart"></div><div class="belly"></div>
+        </div></div>
+        <div class="crew" aria-hidden="true"><i></i><i></i><i></i><i></i></div>
+        <div class="title">Dikkey</div>
+        <div class="cc" id="cc"></div>
+        <div class="osd bl">© 2026 DIKKEY</div>
+        <div class="osd br" id="clock">AM 9:00</div>
+      </div>
+      <div class="scan"></div><div class="noise"></div><div class="roll"></div><div class="vignette"></div>
+    </div>
+  </div>
+  <div class="controls">
+    <button class="power" id="power" type="button" aria-label="Power" aria-pressed="false">
+      <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" aria-hidden="true"><path d="M12 3v9"/><path d="M6.3 6.6a8 8 0 1 0 11.4 0"/></svg>
+    </button>
+    <button class="btn talk" id="talk" type="button" disabled>HOLD TO TALK</button>
+  </div>
+  <div class="hint" id="hint">Press the power button to switch Dikkey on.</div>
+</main>
+<script>
+  // Dikkey TV: follows the virtual board (the real toy code on this Mac's mic and speaker).
+  const $ = (id) => document.getElementById(id);
+  const screen = $("screen");
+  const MODES = { "0,40,0": "listen", "40,18,0": "think", "24,0,40": "talk", "0,0,6": "idle", "40,0,0": "error" };
+  const OSD = { idle: "▶ PLAY", listen: '<span class="rec-dot blink"></span>REC', think: "THINKING<span class=\"blink\">…</span>",
+                talk: "▶ PLAY · DIKKEY", error: "NO SIGNAL" };
+  let on = false, busy = false, lastMode = "", lastRow = 0;
+
+  function setOn(v, animate = true) {
+    if (v === on) return;
+    on = v;
+    screen.classList.toggle("on", v);
+    screen.classList.toggle("off", !v);
+    $("power").classList.toggle("on", v);
+    $("power").setAttribute("aria-pressed", v);
+    $("talk").disabled = !v;
+    $("hint").textContent = v ? "Hold the button (or the space bar), talk, let go." : "Press the power button to switch Dikkey on.";
+    if (v) { $("osdCh").classList.remove("chflash"); void $("osdCh").offsetWidth; $("osdCh").classList.add("chflash"); }
+  }
+
+  async function poll() {
+    let st = { running: false };
+    try { st = await (await fetch("/api/board/virtual/state")).json(); } catch {}
+    if (!busy) setOn(!!st.running);
+    if (!st.running) return;
+    const mode = MODES[(st.led || []).join(",")] || "idle";
+    if (mode !== lastMode) {
+      screen.dataset.mode = mode === "error" ? "idle" : mode;
+      $("osdState").innerHTML = OSD[mode] || OSD.idle;
+      lastMode = mode;
+    }
+  }
+
+  async function captions() {
+    if (!on) return;
+    try {
+      const rows = (await (await fetch("/api/log?n=30")).json()).filter(r => r.toy === "virtual-board");
+      const r = rows[rows.length - 1];
+      if (r && r.ts !== lastRow) {
+        lastRow = r.ts;
+        const said = (r.heard || "").trim(), reply = (r.reply || "").replace(/\s+/g, " ").trim();
+        const short = reply.length > 140 ? reply.slice(0, 137) + "…" : reply;
+        $("cc").innerHTML = (said ? "<span>YOU: " + esc(said) + "</span><br>" : "") + "<span>DIKKEY: " + esc(short) + "</span>";
+      }
+    } catch {}
+  }
+  const esc = (s) => s.replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
+
+  function tick() {
+    const d = new Date(), h = d.getHours();
+    $("clock").textContent = (h < 12 ? "AM " : "PM ") + ((h % 12) || 12) + ":" + String(d.getMinutes()).padStart(2, "0");
+  }
+
+  $("power").onclick = async () => {
+    if (busy) return;
+    busy = true;
+    const want = !on;
+    $("hint").textContent = want ? "Switching on…" : "Switching off…";
+    if (!want) setOn(false);
+    try {
+      const r = await (await fetch("/api/board/virtual/power", { method: "POST", headers: { "Content-Type": "application/json" },
+                                                               body: JSON.stringify({ on: want }) })).json();
+      setOn(!!r.on);
+    } catch { $("hint").textContent = "Couldn't reach Dikkey's server."; }
+    busy = false;
+  };
+
+  async function press(v) {
+    if (!on) return;
+    $("talk").classList.toggle("held", v);
+    try { await fetch("/api/board/virtual/" + (v ? "press" : "release"), { method: "POST" }); } catch {}
+  }
+  const t = $("talk");
+  t.addEventListener("pointerdown", (e) => { t.setPointerCapture(e.pointerId); press(true); });
+  t.addEventListener("pointerup", () => press(false));
+  t.addEventListener("pointercancel", () => press(false));
+  let spaceDown = false;
+  t.addEventListener("keydown", (e) => { if (e.code === "Space" && !spaceDown) { spaceDown = true; e.preventDefault(); press(true); } });
+  t.addEventListener("keyup", (e) => { if (e.code === "Space") { spaceDown = false; e.preventDefault(); press(false); } });
+
+  tick(); setInterval(tick, 10000);
+  poll(); setInterval(poll, 300);
+  setInterval(captions, 1200);
+</script>
+</body>
+</html>

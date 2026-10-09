@@ -1,0 +1,70 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Dikkey</title>
+<style>
+  :root { --ground:#f5f7f3; --surface:#fff; --ink:#1c2420; --muted:#5b6861; --line:#d8dfd9;
+          --pi:#b3134f; --pi-soft:#fbe7ef; --brain:#0e6f67; --ok:#1f7a3a; --bad:#b3261e; }
+  @media (prefers-color-scheme: dark) {
+    :root { color-scheme: dark; --ground:#121614; --surface:#1a201d; --ink:#e5ebe7; --muted:#9aa8a0;
+            --line:#2c3530; --pi:#f0679a; --pi-soft:#3a1826; --brain:#3fcfbf; --ok:#5fd08a; --bad:#ff8a80; }
+  }
+  * { box-sizing: border-box; }
+  body { margin:0; background:var(--ground); color:var(--ink); font:16px/1.5 system-ui,-apple-system,sans-serif; }
+  .wrap { max-width:480px; margin:0 auto; padding-inline:16px; padding-block:24px 40px; display:grid; gap:18px; }
+  h1 { margin:0; font-size:24px; } h1 span { color:var(--pi); }
+  .row { display:flex; justify-content:space-between; align-items:center; gap:10px; flex-wrap:wrap; font-size:14px; color:var(--muted); }
+  .dot { display:inline-block; width:9px; height:9px; border-radius:50%; margin-right:6px; background:var(--muted); }
+  .dot.ok { background:var(--ok); } .dot.bad { background:var(--bad); }
+  #talk { width:100%; padding:22px; font-size:20px; font-weight:650; border:0; border-radius:16px;
+          background:var(--pi); color:#fff; cursor:pointer; }
+  #talk:disabled { opacity:.55; cursor:default; }
+  #stop { width:100%; padding:14px; font-size:17px; font-weight:600; border:1px solid var(--line); border-radius:14px;
+          background:var(--surface); color:var(--ink); cursor:pointer; }
+  #stop:focus-visible { outline:3px solid var(--brain); outline-offset:3px; }
+  #talk:focus-visible { outline:3px solid var(--brain); outline-offset:3px; }
+  .card { background:var(--surface); border:1px solid var(--line); border-radius:14px; padding:14px 16px; display:grid; gap:8px; }
+  .who { font-size:12px; font-weight:600; letter-spacing:.05em; text-transform:uppercase; }
+  .who.c { color:var(--pi); } .who.t { color:var(--brain); }
+  label { font-size:14px; color:var(--muted); display:grid; gap:6px; }
+  input[type=range] { width:100%; accent-color:var(--pi); }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>Dik<span>key</span></h1>
+  <div class="row"><span id="st">connecting…</span><span><i class="dot" id="bd"></i><span id="bt">brain</span></span></div>
+  <button id="talk">Tap, then talk for 5 seconds</button>
+  <button id="stop">■ Stop Dikkey</button>
+  <div class="card">
+    <div class="who c">Child said</div><div id="heard">–</div>
+    <div class="who t">Toy replied</div><div id="reply">–</div>
+    <div class="row"><span id="ms"></span><span id="n"></span></div>
+  </div>
+  <label for="vol">Speaker volume <input id="vol" type="range" min="0" max="100" value="70"></label>
+</div>
+<script>
+const $ = id => document.getElementById(id);
+const labels = { ready:"Ready", listening:"Listening…", thinking:"Thinking…", speaking:"Speaking…", starting:"Starting…" };
+async function poll() {
+  try {
+    const s = await (await fetch("/state")).json();
+    $("st").textContent = labels[s.status] || s.status;
+    $("talk").disabled = s.status !== "ready";
+    $("bd").className = "dot " + (s.brain_ok ? "ok" : s.brain_ok === false ? "bad" : "");
+    $("bt").textContent = s.brain_ok ? "brain online" : s.brain_ok === false ? "brain offline" : "brain…";
+    $("heard").textContent = s.heard || "–";
+    $("reply").textContent = s.reply || "–";
+    $("ms").textContent = s.last_ms ? "reply in " + (s.last_ms / 1000).toFixed(1) + " s" : "";
+    $("n").textContent = s.talks + " chats";
+  } catch { $("st").textContent = "toy offline"; }
+}
+$("talk").onclick = async () => { $("talk").disabled = true; await fetch("/talk", { method:"POST" }); poll(); };
+$("stop").onclick = async () => { await fetch("/stop", { method:"POST" }); poll(); };
+$("vol").onchange = e => fetch("/volume?pct=" + e.target.value, { method:"POST" });
+poll(); setInterval(poll, 1000);
+</script>
+</body>
+</html>
